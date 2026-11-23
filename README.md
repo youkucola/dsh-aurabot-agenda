@@ -2,6 +2,8 @@
 
 给角色一份自己的节目单：重复日程、单期例外、到点提醒、面板时间轴，以及给模型查 / 改日程的两个工具。
 
+这是 Aurabot 的扩展模块（`module.json` 声明 `api: 1`），装进宿主的 `modules/` 目录后由宿主加载。它替角色排一天的日程，再让她在每一轮对话里知道自己此刻正在做什么、接下来还有哪些安排。
+
 ## 功能
 
 - **重复日程**：一次性、每天、每周、每月、每年；可设间隔与总次数。
@@ -17,6 +19,38 @@
 1. **按墙钟重复**：每次都由原始锚点重新推算第 N 期的墙钟，不累加偏移，避免时区跳变后整体漂移。
 2. **夏令时折叠与跳变**：折叠时刻用 `fold` 显式选一边；跳变空洞按 `gap_policy` 拒绝或顺延，不允许悄悄落到别的时刻。
 3. **月末夹取**：31 日的月重复遇到小月夹到当月最后一天，下个月仍回到 31 日，不会一路缩短。
+
+## 安装
+
+要求宿主 Aurabot **≥ 1.2.1**（`module.json` 的 `minPluginVersion`）、Node.js **≥ 22.13.0**（存储层用内置的 `node:sqlite`）。零第三方依赖，没有构建步骤，不需要 `npm install`。
+
+1. 取本仓库源码，把整个目录命名为 `aurabot-agenda`。目录名必须与 `module.json` 里的 `id` 一致，宿主按目录名认模块，不一致就加载不起来。
+2. 放进 Aurabot 的模块目录：
+
+   | 场景 | 最终模块目录 |
+   | --- | --- |
+   | 默认 | `~/.dsh/plugins-data/aurabot/modules/aurabot-agenda/` |
+   | 设置了 `DSH_HOME` | `<DSH_HOME>/plugins-data/aurabot/modules/aurabot-agenda/` |
+   | 设置了 `AURABOT_DATA_DIR` | `<AURABOT_DATA_DIR>/modules/aurabot-agenda/` |
+
+   `AURABOT_DATA_DIR` 优先于 `DSH_HOME`。数据目录不是默认值时，以面板「已安装」里显示的真实模块路径为准。
+
+3. 目录结构保持完整，不要只拷入口文件。`index.mjs` 必须直接位于模块根目录：
+
+   ```text
+   aurabot-agenda/
+   ├── index.mjs          宿主唯一入口：装配、迁移、注入、面板接口
+   ├── lib/               规则推算、存储、期次铺排与扫描、提示词、工具、生成器
+   ├── panel.js           面板前端（宿主直接当静态文件引入，不经打包）
+   ├── module.json        模块清单：id / 版本 / minPluginVersion / 权限
+   ├── package.json       type: module、engines、测试脚本
+   ├── README.md
+   ├── LICENSE
+   └── test/              本地单测，运行期用不到
+   ```
+
+4. 到面板「已安装」确认模块已识别且处于启用状态。宿主会按文件修改时间自动重新加载改过的模块，所以放进去或改完通常不用重启；必要时重启宿主。
+5. 首次启动自动建库（见下面「数据位置」），设置项随之出现在模块面板里。
 
 ## 对话里的注入
 
@@ -124,6 +158,14 @@
 
 schema 版本 4：v3 → v4 只新增 `agenda_planning_slots` 与它的索引，不动任何旧表，老库直接升级。
 
+## 开发
+
+- 单测：`node --test "test/*.test.mjs"`，等价于 `npm test`。只用 `node:test` + `node:assert`，不引测试框架。
+- 运行环境：Node.js **≥ 22.13.0**（`node:sqlite` 从这一版起可用），零第三方依赖，不需要 `npm install`。
+- 单测只打纯逻辑，不连真实宿主、不发网络请求：`test/time.test.mjs` 与 `test/schedule.test.mjs` 覆盖时区换算和重复规则推期，`test/service.test.mjs` 覆盖日程读写与到期扫描（用系统临时目录里的临时 `agenda.sqlite`，跑完即删），`test/planner.test.mjs` 覆盖每日生成的窗口、段数与材料预算，`test/tools.test.mjs` 覆盖工具入参边界、拒绝代确认与注入文案。
+- 面板前端 `panel.js` 由宿主当静态文件直接引入，不经打包；改完刷新面板即可。后端接口挂在 `/aurabot/api/ext/aurabot-agenda/*`，例如 `GET .../planning`、`POST .../planning/run`。
+- 动 schema 时改 `lib/store.mjs` 的 `SCHEMA_VERSION` 并补上原地升级路径：已经有库在跑，不能要求用户手工迁移，也不能让老库起不来。
+
 ## 从 agenda 改名而来
 
 这个模块原来叫 `agenda`，现在目录名与模块 id 都改成了 `aurabot-agenda`（宿主要求 `id` 与文件夹名一致），
@@ -174,11 +216,11 @@ schema 版本 4：v3 → v4 只新增 `agenda_planning_slots` 与它的索引，
 `ownerOnly` 打开时，执行前会检查 `api.core.hub.turnSendersAllOwner(sessionId)`；
 判断函数读不到就退化为不限制（宁可放行也不误伤），但不会因为「本轮有人是主人」而放行别人。
 
-## 来源说明
+## 来源与许可
 
 本模块的领域模型与不变量（重复规则、夏令时折叠与跳变、月末夹取、到期扫描去重与跳跃补偿、
 工具边界）设计参考 `github.com/menglimi/astrbot_plugin_private_companion` 的 `companion_v2/agenda`
-（AGPL-3.0）。本项目是 JavaScript 的跨语言重新实现，未复制其源码；数据表结构、模块装配方式、
+（AGPL-3.0，Python）。本项目是 JavaScript 的跨语言重新实现，未复制其源码；数据表结构、模块装配方式、
 工具接口与面板均为本项目另写。
 
-本模块自身以 MIT 发布。
+本模块自身以 **MIT** 发布，全文见 [LICENSE](LICENSE)，版权行为 `Copyright (c) 2026 youkucola`。
