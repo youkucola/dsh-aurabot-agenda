@@ -1,0 +1,14 @@
+{
+  "id": "aurabot-agenda",
+  "name": "日程表",
+  "version": "0.1.0",
+  "description": "角色日程表：重复日程、到点提醒、面板时间轴与模型查询工具",
+  "category": "tool",
+  "tags": ["日程", "提醒", "时间轴"],
+  "author": "youkucola",
+  "license": "MIT",
+  "api": 1,
+  "minPluginVersion": "1.2.1",
+  "requires": [],
+  "capabilities": []
+}

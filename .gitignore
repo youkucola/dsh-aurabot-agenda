@@ -1,0 +1,4 @@
+.aurabot-cache/
+node_modules/
+*.log
+.coverage/
